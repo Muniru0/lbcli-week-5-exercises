@@ -33,7 +33,7 @@ PUSH_PUB_OP=$(printf "%02x" $(( ${#PUBKEY} / 2 )))
 REDEEM_HEX="${PUSH_REL_OP}${HEX_LE}b275${PUSH_PUB_OP}${PUBKEY}ac"
 
 # 7) Output results
-# echo
+# echo 
 # echo "=== CSV Redeem Script ==="
 # echo "Relative blocks (dec) : $RELATIVE_BLOCKS"
 # echo "Big‑endian hex        : $HEX_BE"
