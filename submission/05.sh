@@ -6,43 +6,30 @@
 RELATIVE_BLOCKS=150
 PUBKEY="02e3af28965693b9ce1228f9d468149b831d6a0540b25e8a9900f71372c11fb277"
 
-# 2) Convert 150 to hex (big‑endian), ensure even length
-HEX_BE=$(printf "%x" "$RELATIVE_BLOCKS")
-if (( ${#HEX_BE} % 2 )); then
-  HEX_BE="0$HEX_BE"
-fi
-# e.g. "96"
+# 2) Convert the block count to 4‑digit hex (big‑endian), padded
+HEX_BE=$(printf "%04x" "$RELATIVE_BLOCKS")
+#    e.g. "0096"
 
-# 3) For numbers ≤ 0x7f, minimal‐push is one byte little‐endian = same two hex chars
-HEX_LE="$HEX_BE"
-# e.g. "96"
+# 3) Convert to little‑endian by swapping byte pairs
+HEX_LE=$(echo "$HEX_BE" | sed -E 's/([0-9a-f]{2})([0-9a-f]{2})/\2\1/')
+#    e.g. "9600"
 
-# 4) Compute push‑data opcode for 1 byte → 0x01
+# 4) Push‑data opcode for CSV: length of HEX_LE/2 → 2 bytes = 0x02
 PUSH_REL_OP=$(printf "%02x" $(( ${#HEX_LE} / 2 )))
+#    e.g. "02"
 
-# 5) Compute push‑pubkey opcode for 33 bytes → 0x21
-PUSH_PUB_OP=$(printf "%02x" $(( ${#PUBKEY} / 2 )))
+# 5) Compute the public key hash (HASH160 = RIPEMD160(SHA256(pubkey)))
+PKH=$(echo -n "$PUBKEY" \
+  | xxd -r -p \
+  | openssl sha256 -binary \
+  | openssl ripemd160 -binary \
+  | xxd -p -c 40)
 
-# 6) Assemble redeem script hex:
-#    [push‑150][150‐LE][OP_CHECKSEQUENCEVERIFY][OP_DROP]
-#    [push‑pubkey][pubkey][OP_CHECKSIG]
-#
-#    OP_CHECKSEQUENCEVERIFY = 0xb2
-#    OP_DROP               = 0x75
-#    OP_CHECKSIG           = 0xac
-REDEEM_HEX="${PUSH_REL_OP}${HEX_LE}b275${PUSH_PUB_OP}${PUBKEY}ac"
+# 6) Assemble the redeem script hex:
+#    [push‑rel][rel‑LE] b2 75           ← CSV then DROP
+#    76 a9 14 [PKH] 88 ac              ← P2PKH: DUP HASH160 Push20 PKH EQUALVERIFY CHECKSIG
+REDEEM_HEX="${PUSH_REL_OP}${HEX_LE}b27576a914${PKH}88ac"
 
-# 7) Output results
-# echo 
-# echo "=== CSV Redeem Script ==="
-# echo "Relative blocks (dec) : $RELATIVE_BLOCKS"
-# echo "Big‑endian hex        : $HEX_BE"
-# echo "Little‑endian hex     : $HEX_LE"
-# echo
-# echo "Redeem script (hex):"
-# echo "$REDEEM_HEX"
-# echo
+# 7) Output the script hex
+echo "$REDEEM_HEX"
 
-# 8) Decode via bitcoin-cli (regtest) for human‑readable form
-# echo "=== decodescript output ==="
-bitcoin-cli -regtest decodescript "$REDEEM_HEX"
